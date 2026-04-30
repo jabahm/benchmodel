@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.local
+data.db
+*.sqlite
+README.md
+CONTRIBUTING.md
+.vscode
+.idea
+.DS_Store

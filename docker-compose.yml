@@ -1,0 +1,18 @@
+services:
+  benchmodel:
+    build: .
+    image: benchmodel:latest
+    container_name: benchmodel
+    ports:
+      - "3737:3737"
+    environment:
+      DATABASE_URL: file:/data/data.db
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    volumes:
+      - benchmodel-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  benchmodel-data:

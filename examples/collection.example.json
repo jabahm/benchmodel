@@ -1,0 +1,28 @@
+{
+  "name": "Customer support classifier",
+  "description": "Tests for routing tickets to the right team.",
+  "prompts": [
+    {
+      "name": "classify_ticket",
+      "system": "You are a classifier. Reply with strict JSON containing keys \"category\" and \"priority\".",
+      "user": "Classify this ticket: {{ticket}}",
+      "variables": {
+        "ticket": "My order is late and I need it before Friday."
+      },
+      "assertions": [
+        { "type": "contains", "value": "shipping" },
+        {
+          "type": "json_schema",
+          "schema": {
+            "type": "object",
+            "required": ["category", "priority"],
+            "properties": {
+              "category": { "type": "string" },
+              "priority": { "type": "string" }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

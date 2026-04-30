@@ -1,0 +1,32 @@
+name: "Customer support classifier"
+description: "Tests for routing tickets to the right team."
+prompts:
+  - name: "classify_ticket"
+    system: |
+      You are a classifier. Reply with strict JSON containing keys
+      "category" and "priority". Category is one of: shipping, billing, technical.
+      Priority is one of: low, medium, high.
+    user: "Classify this ticket: {{ticket}}"
+    variables:
+      ticket: "My order is late and I need it before Friday."
+    assertions:
+      - type: contains
+        value: "shipping"
+      - type: json_schema
+        schema:
+          type: object
+          required: ["category", "priority"]
+          properties:
+            category:
+              type: string
+              enum: ["shipping", "billing", "technical"]
+            priority:
+              type: string
+              enum: ["low", "medium", "high"]
+
+  - name: "extract_order_id"
+    system: "Extract the order id mentioned by the user. Reply with only the id."
+    user: "Hi I am asking about order ABC-12345 please."
+    assertions:
+      - type: regex
+        pattern: "ABC-\\d+"
