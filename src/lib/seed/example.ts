@@ -1,17 +1,18 @@
 export const EXAMPLE_COLLECTION_YAML = `name: "Customer support classifier"
-description: "Tests for routing tickets to the right team."
+description: "Tests for routing tickets. Assertions are model agnostic."
 prompts:
   - name: "classify_ticket"
     system: |
       You are a classifier. Reply with strict JSON containing keys
       "category" and "priority". Category is one of: shipping, billing, technical.
-      Priority is one of: low, medium, high.
+      Priority is one of: low, medium, high. Do not include any other text.
     user: "Classify this ticket: {{ticket}}"
     variables:
       ticket: "My order is late and I need it before Friday."
     assertions:
-      - type: contains
-        value: "shipping"
+      - type: regex
+        pattern: "category"
+        flags: "i"
       - type: json_schema
         schema:
           type: object
@@ -23,9 +24,17 @@ prompts:
               type: string
 
   - name: "extract_order_id"
-    system: "Extract the order id mentioned by the user. Reply with only the id."
+    system: "Extract the order id from the message. Reply with only the id, no extra text."
     user: "Hi I am asking about order ABC-12345 please."
     assertions:
       - type: regex
         pattern: "ABC-\\\\d+"
+
+  - name: "yes_no_oracle"
+    system: "You answer questions with only YES or NO in uppercase. No explanation, no punctuation."
+    user: "Is the sun a star?"
+    assertions:
+      - type: regex
+        pattern: "yes"
+        flags: "i"
 `;
