@@ -2,7 +2,7 @@
   <img src="public/logo.svg" alt="Benchmodel" width="120" />
 </p>
 
-<h1 align="center">Benchmodel</h1>
+<h1 align="center">benchmodel</h1>
 
 <p align="center">
   <strong>Test, version, and ship prompts for any open source LLM. Runs locally.</strong>
@@ -24,7 +24,6 @@
 
 ![Customer support classifier collection](docs/screenshots/collection-customer-support.png)
 
-The Customer support classifier collection is seeded on first launch. Click any prompt card to edit it, hover for a quick run, or open the Playground for ad hoc streaming runs.
 
 ## Quick start
 
