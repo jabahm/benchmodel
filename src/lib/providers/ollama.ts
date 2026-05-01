@@ -18,6 +18,24 @@ interface OllamaChatResponse {
   done?: boolean;
 }
 
+async function readOllamaError(res: Response): Promise<string> {
+  const text = await res.text();
+  let message = text || res.statusText;
+  try {
+    const parsed = JSON.parse(text) as { error?: string };
+    if (parsed.error) message = parsed.error;
+  } catch {
+    // not JSON, keep the raw text
+  }
+  if (res.status === 400 && /does not support chat/i.test(message)) {
+    return `${message}. Pick a chat model instead of an embedding model.`;
+  }
+  if (res.status === 500 && /more system memory/i.test(message)) {
+    return `${message}. Try a smaller model or free up RAM.`;
+  }
+  return `Ollama (${res.status}): ${message}`;
+}
+
 export class OllamaClient implements ProviderClient {
   private baseUrl: string;
 
@@ -66,8 +84,7 @@ export class OllamaClient implements ProviderClient {
       throw new Error(describeNetworkError(err, this.baseUrl));
     }
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Ollama responded ${res.status}: ${text || res.statusText}`);
+      throw new Error(await readOllamaError(res));
     }
     const data = (await res.json()) as OllamaChatResponse;
     return {
@@ -106,7 +123,7 @@ export class OllamaClient implements ProviderClient {
       throw new Error(describeNetworkError(err, this.baseUrl));
     }
     if (!res.ok || !res.body) {
-      throw new Error(`Ollama responded ${res.status}: ${res.statusText}`);
+      throw new Error(await readOllamaError(res));
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

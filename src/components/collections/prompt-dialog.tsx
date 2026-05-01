@@ -288,7 +288,14 @@ export function PromptDialog({ open, onOpenChange, collectionId, mode }: PromptD
 
         {activePanel === 'try' ? (
           <PanelShell title="Try it" onClose={closePanel}>
-            <TryItPanel result={tryRun.data} loading={tryRun.isPending} onRerun={triggerTry} />
+            <TryItPanel
+              promptId={initialPrompt?.id ?? ''}
+              providerId={providerId}
+              variables={variables}
+              singleResult={tryRun.data}
+              singleLoading={tryRun.isPending}
+              onRerunSingle={triggerTry}
+            />
           </PanelShell>
         ) : null}
 
@@ -396,7 +403,54 @@ function PanelShell({
   );
 }
 
+interface MultiState {
+  status: 'queued' | 'running' | 'done' | 'error';
+  latencyMs?: number;
+  assertionsPassed?: boolean;
+  output?: string;
+  error?: string;
+}
+
 function TryItPanel({
+  promptId,
+  providerId,
+  variables,
+  singleResult,
+  singleLoading,
+  onRerunSingle,
+}: {
+  promptId: string;
+  providerId: string;
+  variables: Record<string, string>;
+  singleResult: RunResult | undefined;
+  singleLoading: boolean;
+  onRerunSingle: () => void;
+}) {
+  return (
+    <Tabs defaultValue="single">
+      <TabsList>
+        <TabsTrigger value="single">Single</TabsTrigger>
+        <TabsTrigger value="all">All models</TabsTrigger>
+      </TabsList>
+      <TabsContent value="single">
+        <SingleResultView
+          result={singleResult}
+          loading={singleLoading}
+          onRerun={onRerunSingle}
+        />
+      </TabsContent>
+      <TabsContent value="all">
+        <AllModelsView
+          promptId={promptId}
+          providerId={providerId}
+          variables={variables}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function SingleResultView({
   result,
   loading,
   onRerun,
@@ -406,11 +460,11 @@ function TryItPanel({
   onRerun: () => void;
 }) {
   if (loading && !result) {
-    return <p className="text-xs text-muted-foreground">Running.</p>;
+    return <p className="py-3 text-xs text-muted-foreground">Running.</p>;
   }
   if (!result) return null;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 pt-2">
       <div className="flex flex-wrap items-center gap-1 text-xs">
         <Badge variant="outline">{result.latencyMs} ms</Badge>
         {result.promptTokens !== undefined ? (
@@ -436,6 +490,142 @@ function TryItPanel({
           {result.output}
         </pre>
       )}
+    </div>
+  );
+}
+
+function AllModelsView({
+  promptId,
+  providerId,
+  variables,
+}: {
+  promptId: string;
+  providerId: string;
+  variables: Record<string, string>;
+}) {
+  const models = useProviderModels(providerId || null);
+  const [results, setResults] = useState<Record<string, MultiState>>({});
+  const [running, setRunning] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const candidates = useMemo(
+    () => (models.data ?? []).filter((m) => !/embed/i.test(m)),
+    [models.data],
+  );
+  const skipped = (models.data ?? []).length - candidates.length;
+
+  const runAll = async () => {
+    if (candidates.length === 0 || !promptId) return;
+    setRunning(true);
+    setResults(Object.fromEntries(candidates.map((m) => [m, { status: 'queued' as const }])));
+    await Promise.all(
+      candidates.map(async (m) => {
+        setResults((prev) => ({ ...prev, [m]: { status: 'running' } }));
+        try {
+          const res = await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ promptId, providerId, model: m, variables }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(typeof data.error === 'string' ? data.error : 'Run failed');
+          }
+          setResults((prev) => ({
+            ...prev,
+            [m]: {
+              status: 'done',
+              latencyMs: data.latencyMs,
+              assertionsPassed: data.assertionsPassed,
+              output: data.output,
+            },
+          }));
+        } catch (err) {
+          setResults((prev) => ({
+            ...prev,
+            [m]: { status: 'error', error: (err as Error).message },
+          }));
+        }
+      }),
+    );
+    setRunning(false);
+  };
+
+  if (!providerId) {
+    return <p className="py-3 text-xs text-muted-foreground">Pick a provider in Binding first.</p>;
+  }
+  if (!promptId) {
+    return <p className="py-3 text-xs text-muted-foreground">Save the prompt first.</p>;
+  }
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          {candidates.length} model{candidates.length === 1 ? '' : 's'} will be tested
+          {skipped > 0 ? ` · ${skipped} embedding model${skipped === 1 ? '' : 's'} skipped` : ''}
+        </span>
+        <span className="ml-auto" />
+        <Button
+          size="sm"
+          onClick={runAll}
+          disabled={running || candidates.length === 0}
+          className="bg-[#FCFD81] text-[#0F1007] hover:bg-[#FCFD81]/90"
+        >
+          {running ? 'Running' : 'Run on all'}
+        </Button>
+      </div>
+      {candidates.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No chat capable models found on this provider.
+        </p>
+      ) : null}
+      {Object.keys(results).length > 0 ? (
+        <ul className="space-y-1">
+          {candidates.map((m) => {
+            const s = results[m];
+            const isExpanded = expanded === m;
+            return (
+              <li key={m} className="rounded-md border bg-background">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs"
+                  onClick={() => setExpanded(isExpanded ? null : m)}
+                  disabled={!s || s.status === 'queued' || s.status === 'running'}
+                >
+                  <span className="font-mono">{m}</span>
+                  <span className="flex items-center gap-1">
+                    {s?.status === 'queued' ? (
+                      <Badge variant="outline">queued</Badge>
+                    ) : s?.status === 'running' ? (
+                      <Badge variant="outline">running</Badge>
+                    ) : s?.status === 'error' ? (
+                      <Badge variant="destructive">error</Badge>
+                    ) : s?.status === 'done' ? (
+                      <>
+                        <Badge variant="outline">{s.latencyMs} ms</Badge>
+                        <Badge variant={s.assertionsPassed ? 'success' : 'destructive'}>
+                          {s.assertionsPassed ? 'pass' : 'fail'}
+                        </Badge>
+                      </>
+                    ) : null}
+                  </span>
+                </button>
+                {isExpanded && s?.status === 'done' ? (
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap border-t bg-muted px-3 py-2 text-xs">
+                    {s.output || '(empty)'}
+                  </pre>
+                ) : null}
+                {isExpanded && s?.status === 'error' ? (
+                  <pre className="whitespace-pre-wrap border-t bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {s.error}
+                  </pre>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }

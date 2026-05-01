@@ -38,7 +38,7 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
         )}
       >
         <Logo className="h-6 w-6 shrink-0" />
-        {collapsed ? null : <span className="ml-2">Benchmodel</span>}
+        {collapsed ? null : <span className="ml-2 lowercase">benchmodel</span>}
       </div>
       <nav className="flex flex-col gap-1 p-2">
         {items.map((item) => {
